@@ -101,11 +101,19 @@ html,body{height:100%;background:#f5f4f0;font-family:'Parkinsans',sans-serif;col
 .mt-eyebrow{font-size:10px;color:#bbb;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;clear:both}
 .mt-heading{font-family:'Manjari',sans-serif;font-weight:400;font-size:18px;line-height:1.4;color:#0a0a0a}
 .modal-body-text{padding:20px 28px;font-size:13px;line-height:1.9;color:#555;white-space:pre-wrap}
-.modal-actions{padding:16px 28px 24px;border-top:1px solid #f0ede6;display:flex;gap:10px;flex-wrap:wrap}
+.modal-edit-area{display:none;margin:0 28px;font-size:13px;line-height:1.9;color:#0a0a0a;font-family:'Parkinsans',sans-serif;border:1px solid #0a0a0a;border-radius:12px;padding:16px;min-height:220px;resize:vertical;width:calc(100% - 56px);outline:none;background:#fafaf8}
+.edit-hint{display:none;margin:6px 28px 0;font-size:11px;color:#bbb}
+.modal-actions{padding:16px 28px 24px;border-top:1px solid #f0ede6;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .ma-copy{background:#0a0a0a;color:#fff;border:none;border-radius:10px;padding:11px 20px;font-family:'Parkinsans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:opacity .2s}
 .ma-copy:hover{opacity:.82}
+.ma-edit{background:transparent;border:1px solid #e0ddd6;border-radius:10px;padding:11px 18px;font-family:'Parkinsans',sans-serif;font-size:13px;color:#666;cursor:pointer;transition:all .2s}
+.ma-edit:hover{border-color:#0a0a0a;color:#0a0a0a}
+.ma-edit.editing{background:#f5f4f0;border-color:#0a0a0a;color:#0a0a0a}
 .ma-regen{background:transparent;border:1px solid #e0ddd6;border-radius:10px;padding:11px 18px;font-family:'Parkinsans',sans-serif;font-size:13px;color:#666;cursor:pointer;transition:border-color .2s}
 .ma-regen:hover{border-color:#0a0a0a;color:#0a0a0a}
+.char-count{font-size:11px;color:#bbb;margin-left:auto}
+.char-count.warn{color:#e67e22}
+.char-count.over{color:#c0392b;font-weight:600}
 
 .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(60px);background:#0a0a0a;color:#fff;padding:11px 22px;border-radius:20px;font-size:13px;font-weight:500;transition:transform .25s;z-index:999;pointer-events:none}
 .toast.show{transform:translateX(-50%) translateY(0)}
@@ -121,7 +129,7 @@ html,body{height:100%;background:#f5f4f0;font-family:'Parkinsans',sans-serif;col
 
 <script>
 const CFG = {
-  access_code  : "Sample123",
+  access_code  : "DEMO2024",
   founder_name : "Ramesh Gupta",
   company_name : "SwiftLogix",
   company_init : "SL",
@@ -137,8 +145,8 @@ VOICE AND TONE:
 
 STRUCTURE (follow every time):
 1. Open with a real scene, client call, field observation, or a specific data point — never a generic opener
-2. Give a clear opinion — especially if it goes against conventional wisdom
-3. Show that you have 12 years of experience but not to boast, but have an honest clear and dfferent years of expertise for different matters and industries. Not generic 12 years of experience in everything around logistics
+2. Share what 12 years taught him about it, or his honest reaction to the data
+3. Give a clear opinion — especially if it goes against conventional wisdom
 4. The second-to-last line should be a sharp, specific reaction — earned by the story above it. Example: "Fix the paperwork first. Then talk to me about blockchain."
 5. End with ONE honest, open question to the reader
 
@@ -259,9 +267,13 @@ What's the one thing you think we should focus on to really move the needle in I
       <div class="mt-heading" id="m-heading"></div>
     </div>
     <div class="modal-body-text" id="m-body"></div>
+    <textarea class="modal-edit-area" id="m-edit" oninput="onEditInput()"></textarea>
+    <div class="edit-hint" id="editHint">✎ Editing — changes save automatically when you copy or close</div>
     <div class="modal-actions">
       <button class="ma-copy" id="copyBtn" onclick="copyPost()">Copy for LinkedIn</button>
-      <button class="ma-regen" onclick="regenOne()">↺ Regenerate this</button>
+      <button class="ma-edit" id="editBtn" onclick="toggleEdit()">✎ Edit post</button>
+      <button class="ma-regen" onclick="regenOne()">↺ Regenerate</button>
+      <span class="char-count" id="charCount"></span>
     </div>
   </div>
 </div>
@@ -479,18 +491,82 @@ function setStatus(type,msg){
 }
 
 /* ── MODAL ── */
+let isEditing=false;
+
 function openModal(i){
   activeIdx=i;
   const p=posts[i];
   document.getElementById('m-eyebrow').textContent=`Post ${i+1} · ${p.label} · ${selLen}`;
   document.getElementById('m-heading').textContent=p.headline?`"${p.headline}"`:'';
   document.getElementById('m-body').textContent=p.text;
+  document.getElementById('m-edit').value=p.text;
   document.getElementById('copyBtn').textContent='Copy for LinkedIn';
+  exitEditMode();
+  updateCharCount(p.text);
   document.getElementById('modalOverlay').classList.add('open');
   document.body.style.overflow='hidden';
 }
-function closeModal(){document.getElementById('modalOverlay').classList.remove('open');document.body.style.overflow=''}
+
+function closeModal(){
+  if(isEditing) saveEdit();
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.body.style.overflow='';
+  exitEditMode();
+}
+
 function overlayClose(e){if(e.target===document.getElementById('modalOverlay'))closeModal()}
+
+function toggleEdit(){
+  isEditing?exitEditMode(true):enterEditMode();
+}
+
+function enterEditMode(){
+  isEditing=true;
+  const body=document.getElementById('m-body');
+  const edit=document.getElementById('m-edit');
+  const btn=document.getElementById('editBtn');
+  const hint=document.getElementById('editHint');
+  edit.value=posts[activeIdx].text;
+  body.style.display='none';
+  edit.style.display='block';
+  hint.style.display='block';
+  btn.textContent='✓ Done editing';
+  btn.classList.add('editing');
+  edit.focus();
+  edit.setSelectionRange(edit.value.length,edit.value.length);
+  updateCharCount(edit.value);
+}
+
+function exitEditMode(save){
+  if(save) saveEdit();
+  isEditing=false;
+  document.getElementById('m-body').style.display='block';
+  document.getElementById('m-edit').style.display='none';
+  document.getElementById('editHint').style.display='none';
+  const btn=document.getElementById('editBtn');
+  btn.textContent='✎ Edit post';
+  btn.classList.remove('editing');
+}
+
+function saveEdit(){
+  const val=document.getElementById('m-edit').value.trim();
+  if(!val) return;
+  posts[activeIdx].text=val;
+  document.getElementById('m-body').textContent=val;
+  renderCards();
+  updateCharCount(val);
+}
+
+function onEditInput(){
+  updateCharCount(document.getElementById('m-edit').value);
+}
+
+function updateCharCount(text){
+  const len=(text||'').length;
+  const el=document.getElementById('charCount');
+  el.textContent=`${len} / 3000 chars`;
+  el.className='char-count'+(len>2800?' over':len>2500?' warn':'');
+}
 
 async function copyPost(){
   const btn=document.getElementById('copyBtn');
